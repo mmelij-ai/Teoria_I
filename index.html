@@ -1,0 +1,559 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Play, Music, Info, CircleDot } from 'lucide-react';
+
+// --- DATOS MUSICALES ---
+
+const diatonicStructures = [
+  { degree: "I", suffix: "", type: "Mayor", structure: "3M + 3m", function: "Tónica Principal" },
+  { degree: "IIm", suffix: "m", type: "Menor", structure: "3m + 3M", function: "Subdominante (Reemplazo)" },
+  { degree: "IIIm", suffix: "m", type: "Menor", structure: "3m + 3M", function: "Tónica (Reemplazo)" },
+  { degree: "IV", suffix: "", type: "Mayor", structure: "3M + 3m", function: "Subdominante Principal" },
+  { degree: "V", suffix: "", type: "Mayor", structure: "3M + 3m", function: "Dominante Principal" },
+  { degree: "VIm", suffix: "m", type: "Menor", structure: "3m + 3M", function: "Tónica (Reemplazo)" },
+  { degree: "VIIdim", suffix: "°", type: "Disminuida", structure: "3m + 3m", function: "Dominante (Reemplazo)" }
+];
+
+// Las 15 tonalidades posibles (incluyendo enarmónicos)
+const circleKeys = [
+  { id: 'C', name: 'C Mayor', type: 'natural', accidentals: [], scale: ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C'] },
+  { id: 'G', name: 'G Mayor', type: 'sharp', accidentals: ['F#'], scale: ['G', 'A', 'B', 'C', 'D', 'E', 'F#', 'G'] },
+  { id: 'D', name: 'D Mayor', type: 'sharp', accidentals: ['F#', 'C#'], scale: ['D', 'E', 'F#', 'G', 'A', 'B', 'C#', 'D'] },
+  { id: 'A', name: 'A Mayor', type: 'sharp', accidentals: ['F#', 'C#', 'G#'], scale: ['A', 'B', 'C#', 'D', 'E', 'F#', 'G#', 'A'] },
+  { id: 'E', name: 'E Mayor', type: 'sharp', accidentals: ['F#', 'C#', 'G#', 'D#'], scale: ['E', 'F#', 'G#', 'A', 'B', 'C#', 'D#', 'E'] },
+  { id: 'B', name: 'B Mayor', type: 'sharp', accidentals: ['F#', 'C#', 'G#', 'D#', 'A#'], scale: ['B', 'C#', 'D#', 'E', 'F#', 'G#', 'A#', 'B'] },
+  { id: 'Cb', name: 'Cb Mayor', type: 'flat', accidentals: ['Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb', 'Fb'], scale: ['Cb', 'Db', 'Eb', 'Fb', 'Gb', 'Ab', 'Bb', 'Cb'] },
+  { id: 'F#', name: 'F# Mayor', type: 'sharp', accidentals: ['F#', 'C#', 'G#', 'D#', 'A#', 'E#'], scale: ['F#', 'G#', 'A#', 'B', 'C#', 'D#', 'E#', 'F#'] },
+  { id: 'Gb', name: 'Gb Mayor', type: 'flat', accidentals: ['Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'], scale: ['Gb', 'Ab', 'Bb', 'Cb', 'Db', 'Eb', 'F', 'Gb'] },
+  { id: 'Db', name: 'Db Mayor', type: 'flat', accidentals: ['Bb', 'Eb', 'Ab', 'Db', 'Gb'], scale: ['Db', 'Eb', 'F', 'Gb', 'Ab', 'Bb', 'C', 'Db'] },
+  { id: 'C#', name: 'C# Mayor', type: 'sharp', accidentals: ['F#', 'C#', 'G#', 'D#', 'A#', 'E#', 'B#'], scale: ['C#', 'D#', 'E#', 'F#', 'G#', 'A#', 'B#', 'C#'] },
+  { id: 'Ab', name: 'Ab Mayor', type: 'flat', accidentals: ['Bb', 'Eb', 'Ab', 'Db'], scale: ['Ab', 'Bb', 'C', 'Db', 'Eb', 'F', 'G', 'Ab'] },
+  { id: 'Eb', name: 'Eb Mayor', type: 'flat', accidentals: ['Bb', 'Eb', 'Ab'], scale: ['Eb', 'F', 'G', 'Ab', 'Bb', 'C', 'D', 'Eb'] },
+  { id: 'Bb', name: 'Bb Mayor', type: 'flat', accidentals: ['Bb', 'Eb'], scale: ['Bb', 'C', 'D', 'Eb', 'F', 'G', 'A', 'Bb'] },
+  { id: 'F', name: 'F Mayor', type: 'flat', accidentals: ['Bb'], scale: ['F', 'G', 'A', 'Bb', 'C', 'D', 'E', 'F'] }
+];
+
+// Posiciones físicas en el Círculo de Quintas (agrupando enarmónicos)
+const circlePositions = [
+  { pos: 0, keys: ['C'] },
+  { pos: 1, keys: ['G'] },
+  { pos: 2, keys: ['D'] },
+  { pos: 3, keys: ['A'] },
+  { pos: 4, keys: ['E'] },
+  { pos: 5, keys: ['B', 'Cb'] },
+  { pos: 6, keys: ['F#', 'Gb'] },
+  { pos: 7, keys: ['Db', 'C#'] },
+  { pos: 8, keys: ['Ab'] },
+  { pos: 9, keys: ['Eb'] },
+  { pos: 10, keys: ['Bb'] },
+  { pos: 11, keys: ['F'] }
+];
+
+// Posiciones Y en el pentagrama SVG según la nota natural y octava (Clave de Sol)
+const staffPositions = { 
+  'C4': 105, 'D4': 97.5, 'E4': 90, 'F4': 82.5, 'G4': 75, 'A4': 67.5, 'B4': 60, 
+  'C5': 52.5, 'D5': 45, 'E5': 37.5, 'F5': 30, 'G5': 22.5, 'A5': 15, 'B5': 7.5, 'C6': 0 
+};
+
+// Posiciones Y estándar para TODAS las alteraciones en la armadura (Clave de Sol)
+const keySigY = {
+  'F#': 30, 'C#': 52.5, 'G#': 22.5, 'D#': 45, 'A#': 67.5, 'E#': 37.5, 'B#': 60,
+  'Bb': 60, 'Eb': 37.5, 'Ab': 67.5, 'Db': 45, 'Gb': 75, 'Cb': 52.5, 'Fb': 82.5
+};
+
+// --- MOTOR DE AUDIO ---
+
+let audioCtx = null;
+
+const initAudio = () => {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+};
+
+const noteToFreq = (noteString) => {
+  const match = noteString.match(/^([A-G][#b]?)(\d)$/);
+  if (!match) return 440;
+  
+  const name = match[1];
+  const octave = parseInt(match[2], 10);
+  
+  const midiMap = {
+    'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+    'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8,
+    'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
+  };
+  
+  const baseMidi = midiMap[name];
+  const midiNote = (octave + 1) * 12 + baseMidi;
+  return 440 * Math.pow(2, (midiNote - 69) / 12);
+};
+
+const midiToFreq = (midiNote) => 440 * Math.pow(2, (midiNote - 69) / 12);
+
+const playTone = (freq, startTime, duration = 0.8) => {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  
+  osc.type = 'sine'; // Tono suave para teoría
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  osc.frequency.setValueAtTime(freq, startTime);
+  
+  // Envolvente de sonido
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05); 
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); 
+  
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+};
+
+// --- COMPONENTES AUXILIARES ---
+
+const getScaleWithOctaves = (scaleNotes) => {
+  let currentOctave = 4;
+  return scaleNotes.map((note, index) => {
+    if (index > 0 && note.startsWith('C')) {
+      currentOctave++;
+    }
+    return `${note}${currentOctave}`;
+  });
+};
+
+const getTwoOctaves = (scalePitches) => {
+  const nextOctave = scalePitches.slice(1).map(p => {
+    const match = p.match(/(.*)(\d)/);
+    return `${match[1]}${parseInt(match[2]) + 1}`;
+  });
+  return [...scalePitches, ...nextOctave];
+};
+
+const getBaseMidi = (noteName) => {
+  const match = noteName.match(/^([A-G])([#b]?)$/);
+  if (!match) return 0;
+  const map = { 'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11 };
+  let val = map[match[1]];
+  if (match[2] === '#') val += 1;
+  if (match[2] === 'b') val -= 1;
+  return val;
+};
+
+const getChordMidi = (rootName, thirdName, fifthName, inv = 0) => {
+  const root = getBaseMidi(rootName) + 60;
+  let third = getBaseMidi(thirdName) + 60;
+  if (third < root) third += 12;
+  let fifth = getBaseMidi(fifthName) + 60;
+  if (fifth < third) fifth += 12;
+  
+  if (inv === 1) return [third, fifth, root + 12];
+  if (inv === 2) return [fifth, root + 12, third + 12];
+  return [root, third, fifth];
+};
+
+const Staff = ({ keyData }) => {
+  const scalePitches = getScaleWithOctaves(keyData.scale);
+  const startX = 70 + (keyData.accidentals.length * 15) + 20;
+  const spacing = (380 - startX) / 7;
+
+  return (
+    <div className="w-full overflow-x-auto bg-slate-900/50 rounded-xl shadow-inner p-4 border border-slate-700">
+      <svg viewBox="0 0 420 140" className="w-full min-w-[400px] h-auto">
+        {[30, 45, 60, 75, 90].map(y => (
+          <line key={y} x1="10" y1={y} x2="410" y2={y} stroke="#475569" strokeWidth="1" />
+        ))}
+        
+        <text x="5" y="95" fontSize="110" fontFamily="serif" fill="#94a3b8" className="select-none">𝄞</text>
+        
+        {keyData.accidentals.map((acc, i) => (
+          <text 
+            key={`acc-${i}`} 
+            x={70 + i * 15} 
+            y={keySigY[acc] + 6} 
+            fontSize="22" 
+            fontFamily="serif" 
+            fill="#94a3b8"
+            className="select-none font-bold"
+          >
+            {keyData.type === 'sharp' ? '♯' : '♭'}
+          </text>
+        ))}
+
+        {scalePitches.map((pitch, i) => {
+          const cleanNote = pitch.replace(/[#b]/g, '');
+          const y = staffPositions[cleanNote];
+          const x = startX + i * spacing;
+          
+          return (
+            <g key={`note-${i}`}>
+              {y >= 105 && <line x1={x-14} y1={105} x2={x+14} y2={105} stroke="#cbd5e1" strokeWidth="1.5" />}
+              {y <= 15 && <line x1={x-14} y1={15} x2={x+14} y2={15} stroke="#cbd5e1" strokeWidth="1.5" />}
+              <ellipse cx={x} cy={y} rx="8" ry="6" transform={`rotate(-15 ${x} ${y})`} fill="#22d3ee" />
+              <text x={x} y={130} textAnchor="middle" fontSize="14" fontWeight="bold" fill="#94a3b8" className="select-none font-sans">
+                {keyData.scale[i]}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+
+// --- COMPONENTE PRINCIPAL ---
+
+export default function App() {
+  const [activeKeyId, setActiveKeyId] = useState('C');
+  const [activeChordIndex, setActiveChordIndex] = useState(null);
+  const [inversion, setInversion] = useState(0);
+  
+  const activeKey = useMemo(() => circleKeys.find(k => k.id === activeKeyId), [activeKeyId]);
+  const currentPosition = useMemo(() => circlePositions.find(p => p.keys.includes(activeKeyId)), [activeKeyId]);
+
+  useEffect(() => {
+    setActiveChordIndex(null);
+    setInversion(0);
+  }, [activeKeyId]);
+
+  const handlePlayScale = () => {
+    initAudio();
+    const pitches = getScaleWithOctaves(activeKey.scale);
+    let startTime = audioCtx.currentTime;
+    
+    pitches.forEach((pitch) => {
+      const freq = noteToFreq(pitch);
+      playTone(freq, startTime, 0.6);
+      startTime += 0.45;
+    });
+  };
+
+  const handlePlayChord = (rootIndex, inv = inversion) => {
+    initAudio();
+    const rootName = activeKey.scale[rootIndex];
+    const thirdName = activeKey.scale[(rootIndex + 2) % 7];
+    const fifthName = activeKey.scale[(rootIndex + 4) % 7];
+    const chordMidi = getChordMidi(rootName, thirdName, fifthName, inv);
+    
+    const now = audioCtx.currentTime;
+    chordMidi.forEach(midi => {
+      playTone(midiToFreq(midi), now, 1.5);
+    });
+  };
+
+  let activeMidiNotes = [];
+  let activeNoteData = {}; 
+  
+  if (activeChordIndex !== null) {
+    const rootName = activeKey.scale[activeChordIndex];
+    const thirdName = activeKey.scale[(activeChordIndex + 2) % 7];
+    const fifthName = activeKey.scale[(activeChordIndex + 4) % 7];
+    activeMidiNotes = getChordMidi(rootName, thirdName, fifthName, inversion);
+    
+    if (inversion === 0) {
+      activeNoteData[activeMidiNotes[0]] = rootName;
+      activeNoteData[activeMidiNotes[1]] = thirdName;
+      activeNoteData[activeMidiNotes[2]] = fifthName;
+    } else if (inversion === 1) {
+      activeNoteData[activeMidiNotes[0]] = thirdName;
+      activeNoteData[activeMidiNotes[1]] = fifthName;
+      activeNoteData[activeMidiNotes[2]] = rootName;
+    } else if (inversion === 2) {
+      activeNoteData[activeMidiNotes[0]] = fifthName;
+      activeNoteData[activeMidiNotes[1]] = rootName;
+      activeNoteData[activeMidiNotes[2]] = thirdName;
+    }
+  }
+
+  const formatNote = (note) => note.replace('#', '♯').replace('b', '♭');
+
+  const whiteKeys = [];
+  const blackKeys = [];
+  let whiteIndex = 0;
+  const totalWhiteKeys = 22; 
+
+  for (let midi = 60; midi <= 96; midi++) {
+    const noteInOctave = midi % 12;
+    const isBlack = [1, 3, 6, 8, 10].includes(noteInOctave);
+    const isActive = activeMidiNotes.includes(midi);
+    const noteName = isActive ? formatNote(activeNoteData[midi]) : '';
+
+    if (isBlack) {
+      blackKeys.push(
+        <div
+          key={midi}
+          onPointerDown={(e) => {
+            e.preventDefault(); // Evita comportamientos indeseados al tocar en pantallas
+            initAudio();
+            playTone(midiToFreq(midi), audioCtx.currentTime, 1.5);
+          }}
+          className={`absolute z-10 rounded-b-md shadow-md transition-colors border-x border-b border-slate-950 cursor-pointer active:brightness-125 ${isActive ? 'bg-cyan-500 shadow-[0_4px_15px_rgba(34,211,238,0.5)]' : 'bg-[#0f172a] hover:bg-slate-800'}`}
+          style={{
+            left: `calc(${(whiteIndex) * (100 / totalWhiteKeys)}% - ${(100 / totalWhiteKeys) * 0.3}%)`,
+            width: `${(100 / totalWhiteKeys) * 0.6}%`,
+            height: '65%'
+          }}
+        >
+          {isActive && (
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center">
+              <span className="text-slate-900 font-bold text-[10px] sm:text-xs leading-none">{noteName}</span>
+            </div>
+          )}
+        </div>
+      );
+    } else {
+      whiteKeys.push(
+        <div
+          key={midi}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            initAudio();
+            playTone(midiToFreq(midi), audioCtx.currentTime, 1.5);
+          }}
+          className={`flex-1 relative rounded-b-md border-r border-slate-400 transition-colors cursor-pointer active:brightness-90 ${isActive ? 'bg-cyan-100 shadow-[inset_0_-4px_15px_rgba(34,211,238,0.5)]' : 'bg-slate-200 hover:bg-slate-300'} ${midi === 96 ? 'border-r-0' : ''}`}
+        >
+          {isActive && (
+            <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center justify-end gap-1">
+              <span className="text-cyan-800 font-bold text-[10px] sm:text-xs leading-none">{noteName}</span>
+              <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-cyan-500 rounded-full shadow-sm shadow-cyan-500/50"></div>
+            </div>
+          )}
+        </div>
+      );
+      whiteIndex++;
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans p-4 md:p-8 overflow-x-hidden">
+      
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scroll::-webkit-scrollbar { height: 10px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #0f172a; border-radius: 8px; margin: 0 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 8px; border: 2px solid #0f172a; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
+      `}} />
+
+      <header className="max-w-6xl mx-auto mb-8 text-center md:text-left">
+        <h1 className="text-3xl md:text-4xl font-black text-[#22d3ee] flex items-center justify-center md:justify-start gap-3">
+          Teoría Musical I
+        </h1>
+        <p className="text-slate-400 mt-2 text-lg">Profesor Marcelo Melipil J.</p>
+      </header>
+
+      <main className="max-w-6xl mx-auto flex flex-col gap-8">
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <section className="flex flex-col items-center justify-center bg-[#1e293b] p-6 md:p-8 rounded-2xl shadow-lg border border-slate-700 h-full">
+            <h2 className="text-xl font-bold mb-2 text-[#22d3ee]">El Círculo de Quintas</h2>
+            <p className="text-sm text-slate-400 mb-8 text-center max-w-sm">
+              Haz clic en una tonalidad para explorarla. Vuelve a hacer clic para alternar su enarmónico.
+            </p>
+            
+            <div className="relative w-[320px] h-[320px] my-4 mx-auto flex items-center justify-center">
+              <div className="absolute w-[250px] h-[250px] rounded-full border-4 border-slate-700"></div>
+              
+              {circlePositions.map((pos) => {
+                const angle = (pos.pos * 30 - 90) * (Math.PI / 180);
+                const radius = 125;
+                const cx = Math.cos(angle) * radius + 160;
+                const cy = Math.sin(angle) * radius + 160;
+                const isActive = pos.keys.includes(activeKeyId);
+                
+                return (
+                  <button
+                    key={pos.pos}
+                    onClick={() => {
+                      if (isActive && pos.keys.length > 1) {
+                        // Alternar enarmónico si ya está activo
+                        setActiveKeyId(activeKeyId === pos.keys[0] ? pos.keys[1] : pos.keys[0]);
+                      } else {
+                        // Seleccionar el primero por defecto
+                        setActiveKeyId(pos.keys[0]);
+                      }
+                    }}
+                    style={{ left: `${cx}px`, top: `${cy}px` }}
+                    className={`absolute w-14 h-14 -ml-7 -mt-7 rounded-full flex items-center justify-center font-bold transition-all duration-300 shadow-sm
+                      ${isActive 
+                        ? 'bg-cyan-900/80 text-cyan-300 border-2 border-cyan-400 scale-110 shadow-[0_0_15px_rgba(34,211,238,0.4)]' 
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-2 border-slate-600 hover:scale-105 hover:border-cyan-500/50'
+                      }`}
+                  >
+                    {pos.keys.length > 1 ? (
+                      <div className="flex flex-col items-center justify-center leading-none w-full">
+                        <span className={`text-[14px] ${isActive && activeKeyId === pos.keys[0] ? 'text-white' : ''}`}>{pos.keys[0]}</span>
+                        <div className="h-[1px] w-6 bg-current opacity-30 my-[2px]"></div>
+                        <span className={`text-[11px] ${isActive && activeKeyId === pos.keys[1] ? 'text-white font-bold' : 'opacity-75'}`}>{pos.keys[1]}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[15px]">{pos.keys[0]}</span>
+                    )}
+                  </button>
+                );
+              })}
+              
+              <div className="absolute inset-0 m-auto w-24 h-24 rounded-full bg-slate-800 border border-slate-700 flex flex-col items-center justify-center text-slate-400">
+                <CircleDot className="w-8 h-8 mb-1 opacity-50 text-cyan-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider">Mayor</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="flex flex-col justify-center bg-[#1e293b] rounded-2xl shadow-lg border border-slate-700 p-6 md:p-8 h-full">
+            <div className="flex flex-col xl:flex-row xl:items-start justify-between mb-6 gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-2xl font-bold text-[#22d3ee]">Tonalidad de {activeKey.name}</h2>
+                  
+                  {/* Selector de Enarmónicos (Solo visible si la posición tiene 2 opciones) */}
+                  {currentPosition && currentPosition.keys.length > 1 && (
+                    <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-600 shadow-inner">
+                      {currentPosition.keys.map(k => (
+                        <button
+                          key={k}
+                          onClick={() => setActiveKeyId(k)}
+                          className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                            activeKeyId === k 
+                              ? 'bg-cyan-600 text-white shadow-md' 
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                          }`}
+                        >
+                          {k}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="px-3 py-1 bg-slate-900/50 text-slate-300 border border-slate-700 text-sm font-medium rounded-full flex items-center gap-1.5">
+                    <Info className="w-4 h-4 text-cyan-500" />
+                    Armadura: {activeKey.accidentals.length === 0 
+                      ? "Sin alteraciones" 
+                      : `${activeKey.accidentals.length} ${activeKey.type === 'sharp' ? 'Sostenido(s)' : 'Bemol(es)'}`
+                    }
+                  </span>
+                  {activeKey.accidentals.length > 0 && (
+                    <span className="px-3 py-1 bg-cyan-900/30 text-cyan-400 border border-cyan-800/50 text-sm font-medium rounded-full">
+                      {activeKey.accidentals.join(' - ')}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <button 
+                onClick={handlePlayScale}
+                className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-lg font-medium transition-colors shadow-md w-full xl:w-auto"
+              >
+                <Play className="w-4 h-4 fill-current" /> Escuchar Escala
+              </button>
+            </div>
+
+            <Staff keyData={activeKey} />
+          </section>
+        </div>
+
+        <section className="bg-[#1e293b] rounded-2xl shadow-lg border border-slate-700 p-6 md:p-8">
+          
+          <div className="mb-6">
+            <h3 className="text-xl font-bold text-[#22d3ee]">Sistema Diatónico de Acordes</h3>
+            <p className="text-slate-400 text-sm mt-1">
+              Las triadas de la escala de {activeKey.name}. Haz clic en un acorde para escucharlo y visualizarlo en el piano.
+            </p>
+          </div>
+
+          <div className="flex overflow-x-auto gap-4 pb-6 custom-scroll snap-x snap-mandatory">
+            {diatonicStructures.map((struct, i) => {
+              const rootNote = activeKey.scale[i];
+              const thirdNote = activeKey.scale[(i + 2) % 7];
+              const fifthNote = activeKey.scale[(i + 4) % 7];
+              const chordName = `${rootNote}${struct.suffix}`;
+              const isCardActive = activeChordIndex === i;
+
+              return (
+                <div 
+                  key={struct.degree} 
+                  onClick={() => {
+                    setActiveChordIndex(i);
+                    handlePlayChord(i, inversion);
+                  }}
+                  className={`flex-shrink-0 w-[260px] flex flex-col border rounded-xl p-5 transition-all cursor-pointer snap-center
+                    ${isCardActive 
+                      ? 'border-cyan-400 bg-slate-800 shadow-[0_0_20px_rgba(34,211,238,0.15)] ring-1 ring-cyan-500/50' 
+                      : 'border-slate-700 bg-slate-800/40 hover:bg-slate-800/80 hover:border-cyan-500/30'}
+                  `}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <span className={`text-lg font-bold ${isCardActive ? 'text-cyan-400' : 'text-cyan-600'}`}>{struct.degree}</span>
+                    <button className={`p-2 rounded-full transition-colors ${isCardActive ? 'bg-cyan-900/50 text-cyan-400' : 'bg-slate-900/50 text-slate-500'}`}>
+                      <Play className="w-4 h-4 fill-current" />
+                    </button>
+                  </div>
+                  
+                  <h4 className="text-2xl font-black text-slate-100 mb-1">{chordName}</h4>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                    {struct.type}
+                  </p>
+                  
+                  <div className="mt-auto space-y-2.5">
+                    <div className="flex justify-between text-sm border-b border-slate-700/50 pb-1.5">
+                      <span className="text-slate-500">Notas</span>
+                      <span className="font-bold text-slate-200">{rootNote} - {thirdNote} - {fifthNote}</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-b border-slate-700/50 pb-1.5">
+                      <span className="text-slate-500">Estructura</span>
+                      <span className="font-medium text-slate-300">{struct.structure}</span>
+                    </div>
+                    <div className="flex justify-between text-sm pt-1">
+                      <span className="text-slate-500">Función</span>
+                      <span className={`font-medium text-right max-w-[120px] leading-tight ${isCardActive ? 'text-cyan-300' : 'text-cyan-500'}`}>
+                        {struct.function}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-8 pt-8 border-t border-slate-700/50">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+              <h4 className="text-lg font-bold text-slate-300">
+                Posición en el Teclado:
+              </h4>
+              <select
+                value={inversion}
+                onChange={(e) => {
+                   const newInv = parseInt(e.target.value);
+                   setInversion(newInv);
+                   if (activeChordIndex !== null) {
+                      handlePlayChord(activeChordIndex, newInv);
+                   }
+                }}
+                className="bg-slate-800 border border-slate-600 text-slate-200 text-sm font-semibold rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-2.5 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
+              >
+                <option value={0}>Estado Fundamental</option>
+                <option value={1}>Primera Inversión</option>
+                <option value={2}>Segunda Inversión</option>
+              </select>
+            </div>
+            
+            <div className="flex relative h-36 sm:h-44 w-full max-w-4xl mx-auto border-t-8 border-slate-900 rounded-b-lg shadow-2xl bg-slate-900 select-none">
+              {whiteKeys}
+              {blackKeys}
+            </div>
+            
+            <div className="text-center mt-4">
+              <span className="text-xs text-slate-500 font-medium tracking-widest uppercase">C4 a C7</span>
+            </div>
+          </div>
+
+        </section>
+      </main>
+    </div>
+  );
+}
